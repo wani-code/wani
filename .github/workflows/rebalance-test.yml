@@ -7,6 +7,7 @@
 # 계좌를 여러 개 등록하려면 Secrets 에 KIS_ACCOUNT_NO_1/KIS_ACCOUNT_PRDT_CD_1,
 # _2, _3 ... 순서대로 추가하고, 아래 env 목록에도 필요한 만큼 줄을 늘려주세요.
 # (지금은 최대 5개 계좌까지 미리 연결해뒀습니다. 안 쓰는 번호는 비워둬도 됩니다.)
+# 1번 계좌는 번호 없는 예전 이름(KIS_ACCOUNT_NO/KIS_ACCOUNT_PRDT_CD/KIS_ACCOUNT_LABEL)도 인식합니다.
 
 name: rebalance-test
 
@@ -32,6 +33,9 @@ jobs:
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
+          KIS_ACCOUNT_PRDT_CD: ${{ secrets.KIS_ACCOUNT_PRDT_CD }}
+          KIS_ACCOUNT_LABEL: ${{ secrets.KIS_ACCOUNT_LABEL }}
           KIS_ACCOUNT_NO_1: ${{ secrets.KIS_ACCOUNT_NO_1 }}
           KIS_ACCOUNT_PRDT_CD_1: ${{ secrets.KIS_ACCOUNT_PRDT_CD_1 }}
           KIS_ACCOUNT_LABEL_1: ${{ secrets.KIS_ACCOUNT_LABEL_1 }}
