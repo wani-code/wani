@@ -1,0 +1,41 @@
+# 저장 위치: 리포지토리의  .github/workflows/brief.yml
+#
+# 14:30 KST = 05:30 UTC, 평일(월~금)만 실행
+# GitHub Actions cron 은 부하에 따라 최대 15분가량 지연될 수 있습니다.
+# 정확한 시각이 중요하면 05:20 UTC 로 당겨두는 것을 권합니다.
+
+name: portfolio-brief
+
+on:
+  schedule:
+    - cron: "30 5 * * 1-5"
+  workflow_dispatch:        # 수동 실행 버튼
+    inputs:
+      dry_run:
+        description: "발송하지 않고 로그만 출력"
+        type: boolean
+        default: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Send brief
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: python brief.py
