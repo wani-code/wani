@@ -1,8 +1,12 @@
 # 저장 위치: 리포지토리의 .github/workflows/rebalance-test.yml
 #
 # 이 워크플로우는 "테스트 전용"입니다.
-# 카카오톡으로 아무것도 보내지 않고, 결과를 화면(로그)에만 출력합니다.
+# 아무 곳에도 발송하지 않고, 결과를 화면(로그)에만 출력합니다.
 # 잔고 조회가 잘 되는지, 목표비중 계산이 맞는지 눈으로 확인하는 용도입니다.
+#
+# 계좌를 여러 개 등록하려면 Secrets 에 KIS_ACCOUNT_NO_1/KIS_ACCOUNT_PRDT_CD_1,
+# _2, _3 ... 순서대로 추가하고, 아래 env 목록에도 필요한 만큼 줄을 늘려주세요.
+# (지금은 최대 5개 계좌까지 미리 연결해뒀습니다. 안 쓰는 번호는 비워둬도 됩니다.)
 
 name: rebalance-test
 
@@ -28,6 +32,19 @@ jobs:
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
-          KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
-          KIS_ACCOUNT_PRDT_CD: ${{ secrets.KIS_ACCOUNT_PRDT_CD }}
+          KIS_ACCOUNT_NO_1: ${{ secrets.KIS_ACCOUNT_NO_1 }}
+          KIS_ACCOUNT_PRDT_CD_1: ${{ secrets.KIS_ACCOUNT_PRDT_CD_1 }}
+          KIS_ACCOUNT_LABEL_1: ${{ secrets.KIS_ACCOUNT_LABEL_1 }}
+          KIS_ACCOUNT_NO_2: ${{ secrets.KIS_ACCOUNT_NO_2 }}
+          KIS_ACCOUNT_PRDT_CD_2: ${{ secrets.KIS_ACCOUNT_PRDT_CD_2 }}
+          KIS_ACCOUNT_LABEL_2: ${{ secrets.KIS_ACCOUNT_LABEL_2 }}
+          KIS_ACCOUNT_NO_3: ${{ secrets.KIS_ACCOUNT_NO_3 }}
+          KIS_ACCOUNT_PRDT_CD_3: ${{ secrets.KIS_ACCOUNT_PRDT_CD_3 }}
+          KIS_ACCOUNT_LABEL_3: ${{ secrets.KIS_ACCOUNT_LABEL_3 }}
+          KIS_ACCOUNT_NO_4: ${{ secrets.KIS_ACCOUNT_NO_4 }}
+          KIS_ACCOUNT_PRDT_CD_4: ${{ secrets.KIS_ACCOUNT_PRDT_CD_4 }}
+          KIS_ACCOUNT_LABEL_4: ${{ secrets.KIS_ACCOUNT_LABEL_4 }}
+          KIS_ACCOUNT_NO_5: ${{ secrets.KIS_ACCOUNT_NO_5 }}
+          KIS_ACCOUNT_PRDT_CD_5: ${{ secrets.KIS_ACCOUNT_PRDT_CD_5 }}
+          KIS_ACCOUNT_LABEL_5: ${{ secrets.KIS_ACCOUNT_LABEL_5 }}
         run: python rebalance.py
