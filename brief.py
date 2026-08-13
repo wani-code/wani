@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """
-포트폴리오 통합 브리핑 -> 텔레그램 발송
+포트폴리오 통합 브리핑 -> 카카오톡 '나에게 보내기'
 실행 시각: 매일 14:00 KST (평일)
 
 계좌 잔고 + 리밸런싱 분석(rebalance.py) 결과를 하나의 메시지로 정리해서 보냅니다.
 평소에는 "요약 + 보유 종목 + 리밸런싱" 정도만 오고, 당일 급등락(±5%)이나
 목표비중 이탈이 큰 항목(±5%p)이 있을 때만 <주의 필요> 섹션이 위쪽에 추가로 붙습니다.
-(예전 버전에 있던 "보유 여부와 상관없는 고정 관심종목 시세", "ETF NAV 괴리율",
-"반도체TOP10 내부 비중 규칙"은 정보량을 줄이기 위해 기본 구성에서 뺐습니다.
-필요하시면 다시 추가해드릴 수 있습니다.)
 
 필요 환경변수 (GitHub Secrets):
   KIS_APP_KEY / KIS_APP_SECRET                 한국투자증권 오픈API
   KIS_ACCOUNT_NO_1 / KIS_ACCOUNT_PRDT_CD_1 ...  rebalance.py 와 동일한 계좌 등록 방식
-  TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID         텔레그램 발송
+  KAKAO_REST_API_KEY / KAKAO_REFRESH_TOKEN      카카오 '나에게 보내기'
+
+주의:
+  - KAKAO_REFRESH_TOKEN 유효기간은 약 2개월입니다. 만료되면 발송이 조용히 멈추므로,
+    GitHub → Settings → Notifications → Actions 실패 알림을 켜두시는 걸 권합니다.
 """
 
 import os
 import sys
+import json
 import datetime
 import requests
 
@@ -31,8 +33,9 @@ from rebalance import (
     DRIFT_ALERT_PP,
 )
 
-TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
-TELEGRAM_TEXT_LIMIT = 3500  # 텔레그램 상한 4096자, 여유 두고 3500
+KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
+KAKAO_MEMO_URL = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
+KAKAO_TEXT_LIMIT = 190  # 카카오 text 템플릿 상한 200자, 여유 두고 190
 
 SURGE_PCT = 5.0  # 당일 등락률 경고 임계치
 
@@ -125,8 +128,26 @@ def build_message():
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------- 텔레그램
-def chunk(text, limit=TELEGRAM_TEXT_LIMIT):
+# ---------------------------------------------------------------- 카카오
+def kakao_access_token():
+    r = requests.post(
+        KAKAO_TOKEN_URL,
+        data={
+            "grant_type": "refresh_token",
+            "client_id": os.environ["KAKAO_REST_API_KEY"],
+            "refresh_token": os.environ["KAKAO_REFRESH_TOKEN"],
+        },
+        timeout=15,
+    )
+    r.raise_for_status()
+    body = r.json()
+    if "refresh_token" in body:
+        # 리프레시 토큰이 갱신된 경우 로그로 남김 (Secrets 수동 갱신 필요)
+        print("::warning::KAKAO_REFRESH_TOKEN 이 갱신되었습니다. Secrets 업데이트 필요")
+    return body["access_token"]
+
+
+def chunk(text, limit=KAKAO_TEXT_LIMIT):
     """줄 단위로 limit 이하 조각으로 분할."""
     out, buf = [], ""
     for line in text.split("\n"):
@@ -141,21 +162,23 @@ def chunk(text, limit=TELEGRAM_TEXT_LIMIT):
     return out
 
 
-def telegram_send(text):
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    chat_id = os.environ["TELEGRAM_CHAT_ID"]
-    url = TELEGRAM_API_URL.format(token=token)
-
+def kakao_send(access_token, text):
     parts = chunk(text)
     for i, part in enumerate(parts, 1):
         tag = f"({i}/{len(parts)})\n" if len(parts) > 1 else ""
+        payload = {
+            "object_type": "text",
+            "text": tag + part,
+            "link": {"web_url": "https://m.stock.naver.com"},
+        }
         r = requests.post(
-            url,
-            data={"chat_id": chat_id, "text": tag + part},
+            KAKAO_MEMO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            data={"template_object": json.dumps(payload, ensure_ascii=False)},
             timeout=15,
         )
         if r.status_code != 200:
-            print(f"[error] telegram send: {r.status_code} {r.text}", file=sys.stderr)
+            print(f"[error] kakao send: {r.status_code} {r.text}", file=sys.stderr)
             r.raise_for_status()
         print(f"[ok] sent {i}/{len(parts)}")
 
@@ -167,7 +190,7 @@ def main():
     if os.environ.get("DRY_RUN") == "1":
         print("[dry-run] 발송 생략")
         return
-    telegram_send(msg)
+    kakao_send(kakao_access_token(), msg)
 
 
 if __name__ == "__main__":
