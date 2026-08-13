@@ -1,0 +1,33 @@
+# 저장 위치: 리포지토리의 .github/workflows/rebalance-test.yml
+#
+# 이 워크플로우는 "테스트 전용"입니다.
+# 카카오톡으로 아무것도 보내지 않고, 결과를 화면(로그)에만 출력합니다.
+# 잔고 조회가 잘 되는지, 목표비중 계산이 맞는지 눈으로 확인하는 용도입니다.
+
+name: rebalance-test
+
+on:
+  workflow_dispatch:   # Actions 탭에서 손으로 눌러서 실행하는 버튼
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Run rebalance check (읽기 전용, 발송 없음)
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
+          KIS_ACCOUNT_PRDT_CD: ${{ secrets.KIS_ACCOUNT_PRDT_CD }}
+        run: python rebalance.py
