@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 계좌 잔고 조회 + 현재가 + 리밸런싱 분석 (읽기 전용, 매매 실행 없음)
-[임시 디버그 버전] - 원인 확인 후 원래대로 되돌립니다.
+[임시 디버그 버전 v2] - 원인 확인 후 원래대로 되돌립니다.
 """
 
 import os
@@ -54,9 +54,15 @@ def _headers(token, tr_id):
 
 
 def kis_balance(token):
-    cano = os.environ["KIS_ACCOUNT_NO"]
-    prdt_cd = os.environ["KIS_ACCOUNT_PRDT_CD"]
-    print(f"[DEBUG] CANO_len={len(cano)} PRDT_CD={prdt_cd!r}", file=sys.stderr)
+    cano_raw = os.environ["KIS_ACCOUNT_NO"]
+    prdt_raw = os.environ["KIS_ACCOUNT_PRDT_CD"]
+
+    print(f"[DEBUG] CANO raw_len={len(cano_raw)} isdigit={cano_raw.isdigit()}", file=sys.stderr)
+    print(f"[DEBUG] PRDT raw_len={len(prdt_raw)} isdigit={prdt_raw.isdigit()}", file=sys.stderr)
+
+    cano = cano_raw.strip()
+    prdt_cd = prdt_raw.strip()
+    print(f"[DEBUG] after strip: CANO_len={len(cano)} PRDT_len={len(prdt_cd)}", file=sys.stderr)
 
     holdings = []
     total_eval_amt = 0.0
