@@ -1,14 +1,14 @@
 # 저장 위치: 리포지토리의  .github/workflows/brief.yml
 #
-# 14:30 KST = 05:30 UTC, 평일(월~금)만 실행
+# 14:00 KST = 05:00 UTC, 평일(월~금)만 실행
 # GitHub Actions cron 은 부하에 따라 최대 15분가량 지연될 수 있습니다.
-# 정확한 시각이 중요하면 05:20 UTC 로 당겨두는 것을 권합니다.
+# 정확한 시각이 중요하면 04:50 UTC 로 당겨두는 것을 권합니다.
 
 name: portfolio-brief
 
 on:
   schedule:
-    - cron: "30 5 * * 1-5"
+    - cron: "0 5 * * 1-5"
   workflow_dispatch:        # 수동 실행 버튼
     inputs:
       dry_run:
@@ -35,6 +35,24 @@ jobs:
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
+          KIS_ACCOUNT_PRDT_CD: ${{ secrets.KIS_ACCOUNT_PRDT_CD }}
+          KIS_ACCOUNT_LABEL: ${{ secrets.KIS_ACCOUNT_LABEL }}
+          KIS_ACCOUNT_NO_1: ${{ secrets.KIS_ACCOUNT_NO_1 }}
+          KIS_ACCOUNT_PRDT_CD_1: ${{ secrets.KIS_ACCOUNT_PRDT_CD_1 }}
+          KIS_ACCOUNT_LABEL_1: ${{ secrets.KIS_ACCOUNT_LABEL_1 }}
+          KIS_ACCOUNT_NO_2: ${{ secrets.KIS_ACCOUNT_NO_2 }}
+          KIS_ACCOUNT_PRDT_CD_2: ${{ secrets.KIS_ACCOUNT_PRDT_CD_2 }}
+          KIS_ACCOUNT_LABEL_2: ${{ secrets.KIS_ACCOUNT_LABEL_2 }}
+          KIS_ACCOUNT_NO_3: ${{ secrets.KIS_ACCOUNT_NO_3 }}
+          KIS_ACCOUNT_PRDT_CD_3: ${{ secrets.KIS_ACCOUNT_PRDT_CD_3 }}
+          KIS_ACCOUNT_LABEL_3: ${{ secrets.KIS_ACCOUNT_LABEL_3 }}
+          KIS_ACCOUNT_NO_4: ${{ secrets.KIS_ACCOUNT_NO_4 }}
+          KIS_ACCOUNT_PRDT_CD_4: ${{ secrets.KIS_ACCOUNT_PRDT_CD_4 }}
+          KIS_ACCOUNT_LABEL_4: ${{ secrets.KIS_ACCOUNT_LABEL_4 }}
+          KIS_ACCOUNT_NO_5: ${{ secrets.KIS_ACCOUNT_NO_5 }}
+          KIS_ACCOUNT_PRDT_CD_5: ${{ secrets.KIS_ACCOUNT_PRDT_CD_5 }}
+          KIS_ACCOUNT_LABEL_5: ${{ secrets.KIS_ACCOUNT_LABEL_5 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
