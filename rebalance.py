@@ -14,6 +14,7 @@
     KIS_ACCOUNT_LABEL_1    (선택) 계좌 표시 이름 (예: 본인, 배우자, 연금) - 안 넣으면 "계좌1"
   계좌가 더 있으면 _2, _3, _4 ... 번호를 이어서 등록하면 됩니다.
   번호가 하나라도 비어 있으면 그 지점에서 계좌 인식을 멈추므로, 번호를 건너뛰지 마세요.
+  (1번 계좌는 번호 없는 예전 이름 KIS_ACCOUNT_NO / KIS_ACCOUNT_PRDT_CD / KIS_ACCOUNT_LABEL 도 인식합니다.)
 
 주의:
   - 이 스크립트는 "국내주식 잔고조회" API 를 씁니다. KIS Developers에서
@@ -56,17 +57,33 @@ def load_accounts():
     """
     KIS_ACCOUNT_NO_1 / KIS_ACCOUNT_PRDT_CD_1, _2, _3 ... 순서대로 환경변수를 읽어
     등록된 계좌 목록을 만듭니다. 번호가 끊기면(둘 중 하나라도 없으면) 그 지점에서 멈춥니다.
+
+    1번 계좌는 번호가 붙지 않은 예전 이름(KIS_ACCOUNT_NO / KIS_ACCOUNT_PRDT_CD /
+    KIS_ACCOUNT_LABEL)도 그대로 인식합니다. KIS_ACCOUNT_NO_1 이 따로 등록되어 있으면
+    그쪽을 우선 사용합니다.
     """
     accounts = []
-    i = 1
-    while True:
-        cano = os.environ.get(f"KIS_ACCOUNT_NO_{i}")
-        prdt_cd = os.environ.get(f"KIS_ACCOUNT_PRDT_CD_{i}")
-        if not cano or not prdt_cd:
-            break
-        label = os.environ.get(f"KIS_ACCOUNT_LABEL_{i}") or f"계좌{i}"
-        accounts.append({"cano": cano.strip(), "prdt_cd": prdt_cd.strip(), "label": label})
-        i += 1
+
+    no_1 = os.environ.get("KIS_ACCOUNT_NO_1") or os.environ.get("KIS_ACCOUNT_NO")
+    prdt_1 = os.environ.get("KIS_ACCOUNT_PRDT_CD_1") or os.environ.get("KIS_ACCOUNT_PRDT_CD")
+    if no_1 and prdt_1:
+        label_1 = (
+            os.environ.get("KIS_ACCOUNT_LABEL_1")
+            or os.environ.get("KIS_ACCOUNT_LABEL")
+            or "계좌1"
+        )
+        accounts.append({"cano": no_1.strip(), "prdt_cd": prdt_1.strip(), "label": label_1})
+
+        i = 2
+        while True:
+            cano = os.environ.get(f"KIS_ACCOUNT_NO_{i}")
+            prdt_cd = os.environ.get(f"KIS_ACCOUNT_PRDT_CD_{i}")
+            if not cano or not prdt_cd:
+                break
+            label = os.environ.get(f"KIS_ACCOUNT_LABEL_{i}") or f"계좌{i}"
+            accounts.append({"cano": cano.strip(), "prdt_cd": prdt_cd.strip(), "label": label})
+            i += 1
+
     return accounts
 
 
