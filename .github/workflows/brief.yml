@@ -53,7 +53,7 @@ jobs:
           KIS_ACCOUNT_NO_5: ${{ secrets.KIS_ACCOUNT_NO_5 }}
           KIS_ACCOUNT_PRDT_CD_5: ${{ secrets.KIS_ACCOUNT_PRDT_CD_5 }}
           KIS_ACCOUNT_LABEL_5: ${{ secrets.KIS_ACCOUNT_LABEL_5 }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: python brief.py
