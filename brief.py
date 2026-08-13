@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-포트폴리오 장중 브리핑 -> 텔레그램 발송
-실행 시각: 매일 14:30 KST (평일)
+포트폴리오 통합 브리핑 -> 텔레그램 발송
+실행 시각: 매일 14:00 KST (평일)
+
+계좌 잔고 + 리밸런싱 분석(rebalance.py) 결과를 하나의 메시지로 정리해서 보냅니다.
+평소에는 "요약 + 보유 종목 + 리밸런싱" 정도만 오고, 당일 급등락(±5%)이나
+목표비중 이탈이 큰 항목(±5%p)이 있을 때만 <주의 필요> 섹션이 위쪽에 추가로 붙습니다.
+(예전 버전에 있던 "보유 여부와 상관없는 고정 관심종목 시세", "ETF NAV 괴리율",
+"반도체TOP10 내부 비중 규칙"은 정보량을 줄이기 위해 기본 구성에서 뺐습니다.
+필요하시면 다시 추가해드릴 수 있습니다.)
 
 필요 환경변수 (GitHub Secrets):
-  KIS_APP_KEY          한국투자증권 오픈API App Key
-  KIS_APP_SECRET       한국투자증권 오픈API App Secret
-  TELEGRAM_BOT_TOKEN   텔레그램 봇 토큰 (BotFather 에서 발급)
-  TELEGRAM_CHAT_ID     메시지를 받을 내 Chat ID
+  KIS_APP_KEY / KIS_APP_SECRET                 한국투자증권 오픈API
+  KIS_ACCOUNT_NO_1 / KIS_ACCOUNT_PRDT_CD_1 ...  rebalance.py 와 동일한 계좌 등록 방식
+  TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID         텔레그램 발송
 """
 
 import os
@@ -15,187 +21,104 @@ import sys
 import datetime
 import requests
 
-KIS_BASE = "https://openapi.koreainvestment.com:9443"
-TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
+from rebalance import (
+    kis_token,
+    load_accounts,
+    kis_balance,
+    merge_holdings,
+    compute_rebalance,
+    kis_quote,
+    DRIFT_ALERT_PP,
+)
 
+TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
 TELEGRAM_TEXT_LIMIT = 3500  # 텔레그램 상한 4096자, 여유 두고 3500
 
-# ---------------------------------------------------------------- 보유 종목
-STOCKS = [
-    ("005930", "삼성전자"),
-    ("055550", "신한지주"),
-    ("103590", "일진전기"),
-    ("001440", "대한전선"),
-]
-
-ETFS = [
-    ("133690", "TIGER 미국나스닥100"),
-    ("379800", "KODEX 미국S&P500"),
-    ("441640", "KODEX 미국배당커버드콜"),
-    ("396500", "TIGER 반도체TOP10"),
-    ("237350", "KODEX 코스피100"),
-    ("498400", "KODEX 200타겟위클리CC"),
-    ("472150", "TIGER 배당커버드콜"),
-    ("0183J0", "TIGER 미국우주테크"),
-]
-
-# 반도체TOP10 지수 규칙: 상위 2종목 각 25% 고정
-DRIFT_WATCH_ETF = "396500"
-DRIFT_CAP = 25.0
-DRIFT_ALERT_PP = 5.0   # 캡 대비 이만큼 벗어나면 경고
-
-SURGE_PCT = 5.0        # 등락률 경고 임계치
-PREMIUM_ALERT = 1.0    # 괴리율 경고 임계치 (%)
+SURGE_PCT = 5.0  # 당일 등락률 경고 임계치
 
 
-# ---------------------------------------------------------------- KIS
-def kis_token():
-    r = requests.post(
-        f"{KIS_BASE}/oauth2/tokenP",
-        json={
-            "grant_type": "client_credentials",
-            "appkey": os.environ["KIS_APP_KEY"],
-            "appsecret": os.environ["KIS_APP_SECRET"],
-        },
-        timeout=15,
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
+# ---------------------------------------------------------------- 메시지 생성
+def build_message():
+    token = kis_token()
+    accounts = load_accounts()
 
-
-def _kis_headers(token, tr_id):
-    return {
-        "authorization": f"Bearer {token}",
-        "appkey": os.environ["KIS_APP_KEY"],
-        "appsecret": os.environ["KIS_APP_SECRET"],
-        "tr_id": tr_id,
-        "content-type": "application/json; charset=utf-8",
-    }
-
-
-def kis_quote(token, code):
-    """주식/ETF 공통 현재가. 실패 시 None."""
-    try:
-        r = requests.get(
-            f"{KIS_BASE}/uapi/domestic-stock/v1/quotations/inquire-price",
-            headers=_kis_headers(token, "FHKST01010100"),
-            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
-            timeout=15,
-        )
-        r.raise_for_status()
-        d = r.json().get("output") or {}
-        if not d.get("stck_prpr"):
-            return None
-        return {
-            "price": int(d["stck_prpr"]),
-            "rate": float(d.get("prdy_ctrt", 0)),
-        }
-    except Exception as e:
-        print(f"[warn] quote {code}: {e}", file=sys.stderr)
-        return None
-
-
-def kis_etf_nav(token, code):
-    """ETF NAV/괴리율. 엔드포인트 미지원 시 None으로 조용히 넘어감."""
-    try:
-        r = requests.get(
-            f"{KIS_BASE}/uapi/etfetn/v1/quotations/inquire-price",
-            headers=_kis_headers(token, "FHPST02400000"),
-            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
-            timeout=15,
-        )
-        r.raise_for_status()
-        d = r.json().get("output") or {}
-        nav = float(d.get("nav") or 0)
-        prem = d.get("dprt")
-        return {
-            "nav": nav,
-            "premium": float(prem) if prem not in (None, "") else None,
-        }
-    except Exception as e:
-        print(f"[warn] nav {code}: {e}", file=sys.stderr)
-        return None
-
-
-def kis_etf_holdings(token, code, top=3):
-    """ETF 구성종목 비중 상위 N개."""
-    try:
-        r = requests.get(
-            f"{KIS_BASE}/uapi/etfetn/v1/quotations/inquire-component-stock-price",
-            headers=_kis_headers(token, "FHKST121600C0"),
-            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
-            timeout=15,
-        )
-        r.raise_for_status()
-        rows = r.json().get("output2") or []
-        out = []
-        for row in rows[:top]:
-            out.append({
-                "name": row.get("hts_kor_isnm", "?"),
-                "weight": float(row.get("etf_cnfg_issu_rlim") or 0),
-            })
-        return out
-    except Exception as e:
-        print(f"[warn] holdings {code}: {e}", file=sys.stderr)
-        return []
-
-
-# ---------------------------------------------------------------- 메시지
-def sign(rate):
-    return "+" if rate > 0 else ""
-
-
-def build_message(token):
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
-    lines = [f"[포트폴리오 장중] {now:%m/%d %H:%M}"]
+    lines = [f"[포트폴리오 브리핑] {now:%m/%d %H:%M}"]
 
-    alerts = []
+    if not accounts:
+        lines.append("")
+        lines.append("등록된 계좌가 없습니다. KIS_ACCOUNT_NO_1 / KIS_ACCOUNT_PRDT_CD_1 을 확인해주세요.")
+        return "\n".join(lines)
 
-    lines.append("")
-    lines.append("<개별주>")
-    for code, name in STOCKS:
-        q = kis_quote(token, code)
+    all_holdings = []
+    grand_total = 0.0
+    for acc in accounts:
+        holdings, total = kis_balance(token, acc["cano"], acc["prdt_cd"])
+        all_holdings.extend(holdings)
+        grand_total += total
+
+    if not all_holdings or grand_total <= 0:
+        lines.append("")
+        lines.append("잔고 조회 실패 또는 보유 없음")
+        return "\n".join(lines)
+
+    combined = merge_holdings(all_holdings)
+
+    # 당일 등락률 (보유 종목만 조회)
+    today_rate = {}
+    surge_alerts = []
+    for h in combined:
+        q = kis_quote(token, h["code"])
         if not q:
-            lines.append(f"{name} 조회실패")
             continue
-        mark = " !" if abs(q["rate"]) >= SURGE_PCT else ""
-        lines.append(f"{name} {q['price']:,} ({sign(q['rate'])}{q['rate']:.2f}%){mark}")
+        today_rate[h["code"]] = q["rate"]
         if abs(q["rate"]) >= SURGE_PCT:
-            alerts.append(f"{name} {sign(q['rate'])}{q['rate']:.1f}%")
+            sign = "+" if q["rate"] > 0 else ""
+            surge_alerts.append(f"{h['name']} {sign}{q['rate']:.1f}%")
 
+    rebal = compute_rebalance(combined, grand_total)
+    drift_alerts = []
+    for r in rebal:
+        if abs(r["gap_pp"]) >= DRIFT_ALERT_PP:
+            verb = "매수검토" if r["action_krw"] > 0 else "매도검토"
+            drift_alerts.append(f"{r['group']} {verb} 약 {abs(r['action_krw']):,.0f}원")
+
+    # <요약>
     lines.append("")
-    lines.append("<ETF>")
-    for code, name in ETFS:
-        q = kis_quote(token, code)
-        if not q:
-            lines.append(f"{name} 조회실패")
-            continue
-        line = f"{name} {q['price']:,} ({sign(q['rate'])}{q['rate']:.2f}%)"
-        nav = kis_etf_nav(token, code)
-        if nav and nav.get("premium") is not None:
-            if abs(nav["premium"]) >= PREMIUM_ALERT:
-                line += f" 괴리{nav['premium']:+.2f}% !"
-                alerts.append(f"{name} 괴리율 {nav['premium']:+.2f}%")
-        lines.append(line)
+    lines.append("<요약>")
+    lines.append(f"계좌 {len(accounts)}개 총평가금액 {grand_total:,.0f}원")
+    lines.append("리밸런싱 상태: " + ("조정 필요" if drift_alerts else "양호"))
 
-    # 반도체TOP10 비중 드리프트
-    hold = kis_etf_holdings(token, DRIFT_WATCH_ETF, top=3)
-    if hold:
+    # <주의 필요> (알림 있을 때만)
+    if surge_alerts or drift_alerts:
         lines.append("")
-        lines.append("<반도체TOP10 비중/규칙25%>")
-        for h in hold:
-            gap = h["weight"] - DRIFT_CAP
-            lines.append(f"{h['name']} {h['weight']:.1f}% ({gap:+.1f}p)")
-        top2 = hold[:2]
-        if len(hold) >= 3:
-            margin = top2[1]["weight"] - hold[2]["weight"]
-            lines.append(f"2위-3위 격차 {margin:.1f}p")
-            if margin < 2.0:
-                alerts.append(f"상위2종목 순위 역전 임박 (격차 {margin:.1f}p)")
+        lines.append("<주의 필요>")
+        for a in surge_alerts:
+            lines.append(f"급등락 {a}")
+        for a in drift_alerts:
+            lines.append(f"비중 이탈 {a}")
 
-    if alerts:
-        lines.append("")
-        lines.append("[체크] " + " / ".join(alerts))
+    # <보유 종목>
+    lines.append("")
+    lines.append("<보유 종목>")
+    for h in sorted(combined, key=lambda x: -x["eval_amt"]):
+        rate = today_rate.get(h["code"])
+        if rate is None:
+            rate_str = ""
+        else:
+            sign = "+" if rate > 0 else ""
+            rate_str = f", 오늘{sign}{rate:.2f}%"
+        lines.append(f"{h['name']} {h['eval_amt']:,.0f}원 (누적{h['pnl_pct']:+.1f}%{rate_str})")
+
+    # <리밸런싱>
+    lines.append("")
+    lines.append("<리밸런싱 (목표비중 대비)>")
+    for r in rebal:
+        mark = " !" if abs(r["gap_pp"]) >= DRIFT_ALERT_PP else ""
+        lines.append(
+            f"{r['group']} {r['actual_pct']:.1f}% / 목표{r['target_pct']:.0f}% "
+            f"({r['gap_pp']:+.1f}p){mark}"
+        )
 
     lines.append("")
     lines.append("※ 참고용. 투자자문 아님")
@@ -239,8 +162,7 @@ def telegram_send(text):
 
 # ---------------------------------------------------------------- main
 def main():
-    token = kis_token()
-    msg = build_message(token)
+    msg = build_message()
     print(msg)
     if os.environ.get("DRY_RUN") == "1":
         print("[dry-run] 발송 생략")
